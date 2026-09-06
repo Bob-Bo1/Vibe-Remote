@@ -26,6 +26,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from ovb_rc003 import app as app_module
@@ -642,7 +643,9 @@ class HostHotkeyFailureSuppressesMicOpenTests(_AppWiringTestCase):
 
     def test_no_usable_endpoint_suppresses_hotkey_and_mic_open(self):
         self.app._playback = None
-        self.app._config["output_endpoint_name"] = "some endpoint that is not open"
+        saved = dict(self.app._config)
+        saved["output_endpoint_name"] = "some endpoint that is not open"
+        config.save_config(config.config_path(Path(self._tmp.name)), saved)
 
         hotkey_calls = []
         original = win32_input.send_voice_key_combo_tap
@@ -654,6 +657,76 @@ class HostHotkeyFailureSuppressesMicOpenTests(_AppWiringTestCase):
 
         self.assertEqual(hotkey_calls, [])
         self.assertEqual(self.app._ble_session.mic_open_calls, 0)
+
+    def test_no_selected_endpoint_uses_host_mic_and_still_delivers_voice_trigger(self):
+        """An empty CABLE selection is the intentional system-mic mode.
+
+        The target voice app must still receive its configured host shortcut
+        and the BLE session must receive MIC_OPEN.  The app simply has no
+        remote-PCM playback sink in this mode, so WeChat/Doubao can capture
+        the laptop's own Windows microphone.
+        """
+
+        self.app._voice.trigger_mode = key_mapping.VoiceTriggerMode.HOLD
+        self.app._voice_hotkey = app_module.hotkey.HotkeySpec.parse("lctrl+lwin")
+        self.app._playback = None
+        saved = dict(self.app._config)
+        saved["output_endpoint_name"] = ""
+        saved["output_endpoint_host_api"] = ""
+        config.save_config(config.config_path(Path(self._tmp.name)), saved)
+
+        hotkey_calls = []
+        original = win32_input.send_wechat_key_combo_down
+        win32_input.send_wechat_key_combo_down = lambda tokens: hotkey_calls.append(tokens)
+        try:
+            self.app._handle_mic_button_pressed()
+        finally:
+            win32_input.send_wechat_key_combo_down = original
+
+        self.assertEqual(hotkey_calls, [("lctrl", "lwin")])
+        self.assertEqual(self.app._ble_session.mic_open_calls, 1)
+        self.assertTrue(self.app._voice.active)
+
+    def test_voice_session_reloads_endpoint_saved_after_bridge_started(self):
+        """A settings-page endpoint selection can happen after the bridge
+        object was created.  The next voice session must use that persisted
+        selection instead of the stale in-memory empty value.
+        """
+
+        saved = dict(self.app._config)
+        saved["output_endpoint_name"] = "CABLE Input"
+        saved["output_endpoint_host_api"] = "Windows WASAPI"
+        config.save_config(config.config_path(Path(self._tmp.name)), saved)
+        self.app._playback = None
+
+        created = []
+
+        class _OpenedSink:
+            output_sample_rate_hz = 48_000
+            output_channels = 2
+
+            def __init__(self, name, host_api):
+                created.append((name, host_api))
+
+            def open(self):
+                return None
+
+        with mock.patch.object(
+            app_module.audio_output,
+            "enumerate_output_endpoints",
+            return_value=[
+                app_module.audio_output.AudioEndpoint(
+                    name="CABLE Input", host_api="Windows WASAPI"
+                )
+            ],
+        ), mock.patch.object(
+            app_module.audio_playback,
+            "EndpointPlaybackSink",
+            _OpenedSink,
+        ):
+            self.assertTrue(self.app._open_playback_for_new_session())
+
+        self.assertEqual(created, [("CABLE Input", "Windows WASAPI")])
 
     def test_windows_actually_delivers_the_hotkey_unlike_the_off_windows_case(self):
         """Regression for XRBM-023 outcome 9: on a real Windows runner,

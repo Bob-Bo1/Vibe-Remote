@@ -1,6 +1,6 @@
 # Remote Mic · Windows 版本（RC003）
 
-这是 `miaomiaozii/windows-remote-mic-app` 仓库，面向小米蓝牙遥控器 2 Pro（RC003）的 Windows 蓝牙桥接软件：把遥控器的按键和语音转成 Windows 能识别的键盘按键与语音输入，从而在电脑上操控豆包、微信、WPS 等应用。macOS 应用、Swift 工程和 macOS 发布资源不属于本仓库。
+这是 `Bob-Bo1/Vibe-Remote` 仓库，面向小米蓝牙遥控器 2 Pro（RC003）的 Windows 蓝牙桥接软件：把遥控器的按键和语音转成 Windows 能识别的键盘按键与语音输入，从而在电脑上操控豆包、微信、WPS 等应用。macOS 应用、Swift 工程和 macOS 发布资源不属于本仓库。
 
 Windows 客户端位于 [`apps/windows/rc003`](apps/windows/rc003/README.md)，提供：
 
@@ -9,9 +9,9 @@ Windows 客户端位于 [`apps/windows/rc003`](apps/windows/rc003/README.md)，�
 - 语音输出到用户明确选择的音频端点（配合虚拟声卡供输入法识别）；
 - PySide6/Qt Quick 设置窗口、诊断和 PyInstaller 便携版构建。
 
-当前版本是**Windows RC003 源码/构建候选版**：源码测试、PyInstaller 打包和启动
+当前版本是**Windows RC003 v30 源码/构建候选版**：源码测试、PyInstaller 打包和启动
 冒烟检查已完成，并在一台真实 Windows 电脑上完成返回键、音量+、音量−实体按键
-验收。不同电脑的蓝牙配对、管理员权限、HID 旁路、VB-CABLE 和输入法状态会影响
+验收。v30 修复了本地键盘录入后按键映射卡片不能立即显示新按键的问题。不同电脑的蓝牙配对、管理员权限、HID 旁路、VB-CABLE 和输入法状态会影响
 最终效果；CI 和自动构建不能替代真机配对、按键和语音链路验收。产物未签名。
 
 ## 截图
@@ -24,13 +24,13 @@ Windows 客户端位于 [`apps/windows/rc003`](apps/windows/rc003/README.md)，�
 
 ## 下载与安装
 
-最新正式版：[v0.1.0-windows](https://github.com/miaomiaozii/windows-remote-mic-app/releases/tag/v0.1.0-windows)。
+最新候选版：[v30 Windows RC003](https://github.com/Bob-Bo1/Vibe-Remote/releases/tag/v0.1.0-windows-rc003-candidate.2)。
 
 从 Release 页面 Assets 下载便携版：
 
 | 资产 | 适用场景 |
 | --- | --- |
-| `RemoteMicRC003-0.1.0-candidate-portable-unsigned.zip` | 免安装，解压到任意目录直接运行 |
+| `RemoteMicRC003-0.1.0-candidate-v30-portable-unsigned.zip` | 免安装，解压到短路径后直接运行 |
 
 便携 ZIP 未签名，Windows SmartScreen 可能提示，点“更多信息 → 仍要运行”即可。
 建议同时下载 `SHA256SUMS.txt` 校验文件哈希。Release 中的 ZIP 和校验文件来自同一次

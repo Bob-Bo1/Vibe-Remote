@@ -718,6 +718,10 @@ def _load_qt_classes() -> dict:
             self._rawKeyDetected.connect(self._on_raw_key_detected)
             self._hotkey_capture = None
             self._hotkeyCaptureResult.connect(self._on_hotkey_capture_result)
+            self._hotkey_capture_requested = False
+            self._qt_hotkey_state = hotkey_capture_windows.HotkeyChordState(
+                self._hotkeyCaptureResult.emit
+            )
             self._integrated_bridge = None
             # ``sys.frozen`` is true only in the packaged executable.  Source
             # runs and the legacy CMD launcher keep the proven child-process
@@ -1351,6 +1355,8 @@ def _load_qt_classes() -> dict:
 
             if self._hotkey_capture is not None:
                 return
+            self._hotkey_capture_requested = True
+            self._qt_hotkey_state.reset()
             capture = hotkey_capture_windows.HotkeyCapture(
                 lambda chord: self._hotkeyCaptureResult.emit(chord)
             )
@@ -1362,10 +1368,29 @@ def _load_qt_classes() -> dict:
                 self.hotkeyCaptureError.emit(f"无法启动真实键盘录制：{exc}")
                 return
 
+        @Slot(int, int, int, bool)
+        def captureQtHotkeyKey(
+            self,
+            qt_key: int,
+            native_vk: int,
+            native_scan: int,
+            is_down: bool,
+        ) -> None:
+            """Fallback recorder for key events delivered to the focused QML dialog."""
+
+            if not self._hotkey_capture_requested:
+                return
+            token = hotkey_capture_windows.token_for_qt_key_event(
+                qt_key, native_vk, native_scan
+            )
+            self._qt_hotkey_state.handle_token(token, bool(is_down))
+
         @Slot()
         def stopHotkeyCapture(self) -> None:
             """Stop the physical recorder, including Cancel/window close."""
 
+            self._hotkey_capture_requested = False
+            self._qt_hotkey_state.reset()
             capture = self._hotkey_capture
             self._hotkey_capture = None
             if capture is None:
@@ -1632,6 +1657,7 @@ def _load_qt_classes() -> dict:
         driverStatusMessageChanged = Signal()
         driverInfoMessageChanged = Signal()
         driverErrorMessageChanged = Signal()
+        driverRestartRequiredChanged = Signal()
         # Internal only - never connected to from QML. Carries a
         # windows_diagnostics.DiagnosticsReport (or None on an unexpected
         # worker-thread exception) back from the background thread to this
@@ -1649,6 +1675,7 @@ def _load_qt_classes() -> dict:
             self._driver_status_message = ""
             self._driver_info_message = ""
             self._driver_error_message = ""
+            self._driver_restart_required = False
             self._diagnosticsReady.connect(self._on_diagnostics_ready)
             self.refreshDiagnostics()
 
@@ -1719,6 +1746,14 @@ def _load_qt_classes() -> dict:
             if report is not None:
                 self._check_rows = [_diagnostics_check_to_row(c) for c in report.checks]
                 self._diagnostics_error_message = ""
+                cable_check = report.get("vb_cable_endpoints")
+                if (
+                    cable_check is not None
+                    and cable_check.status is windows_diagnostics.CheckStatus.PASS
+                    and self._driver_restart_required
+                ):
+                    self._driver_restart_required = False
+                    self.driverRestartRequiredChanged.emit()
             else:
                 self._check_rows = []
                 self._diagnostics_error_message = (
@@ -1767,6 +1802,15 @@ def _load_qt_classes() -> dict:
 
         driverErrorMessage = Property(
             str, _get_driver_error_message, notify=driverErrorMessageChanged
+        )
+
+        def _get_driver_restart_required(self) -> bool:
+            return self._driver_restart_required
+
+        driverRestartRequired = Property(
+            bool,
+            _get_driver_restart_required,
+            notify=driverRestartRequiredChanged,
         )
 
         # -- slots ----------------------------------------------------------
@@ -1852,11 +1896,12 @@ def _load_qt_classes() -> dict:
         @Slot(result=bool)
         def selectDetectedCableInputAsOutput(self) -> bool:
             """Re-enumerates playback endpoints (never trusts a possibly-
-            stale prior diagnostics snapshot) and persists the unique
-            detected CABLE Input endpoint as this app's voice output - only
-            ever called from an explicit button click (XRBM-031 In-scope
-            item 5), and only after this method itself confirms exactly one
-            such endpoint currently exists.
+            stale prior diagnostics snapshot) and persists the detected CABLE
+            Input endpoint as this app's voice output - only ever called from
+            an explicit button click (XRBM-031 In-scope item 5). When Windows
+            exposes the same endpoint through multiple host APIs, the audio
+            layer selects the unique WASAPI view; genuinely ambiguous devices
+            still fail closed.
 
             Never raises out of this Slot (XRBM-031 RETRY 1 item 3): both
             enumeration and persistence failures are caught and reported as
@@ -1880,14 +1925,14 @@ def _load_qt_classes() -> dict:
                     "未检测到 CABLE Input 端点；请先确认 VB-CABLE 已安装，安装后需要重启电脑。"
                 )
                 return False
-            if len(matches) > 1:
+            endpoint = audio_output.choose_cable_input_endpoint(endpoints)
+            if endpoint is None:
                 self._set_driver_error(
                     f"检测到 {len(matches)} 个 CABLE Input 端点，无法唯一确定，请手动在"
-                    "「连接」页选择。"
+                    "系统声音设置中保留标准 CABLE Input 后重试。"
                 )
                 return False
 
-            endpoint = matches[0]
             try:
                 persisted = self._settings_controller.selectAndPersistOutputEndpoint(
                     endpoint.name, endpoint.host_api
@@ -1900,7 +1945,7 @@ def _load_qt_classes() -> dict:
 
             if not persisted:
                 self._set_driver_error(
-                    "保存语音输出设置失败，请重试，或稍后在「连接」页手动选择该端点。"
+                    "保存语音输出设置失败，请重试。"
                 )
                 return False
 
@@ -1932,9 +1977,11 @@ def _load_qt_classes() -> dict:
                 # that the vendor UI was launched, never a confirmed
                 # install - that is only ever established later, by a
                 # diagnostics recheck finding both endpoints present.
+                if not self._driver_restart_required:
+                    self._driver_restart_required = True
+                    self.driverRestartRequiredChanged.emit()
                 self._set_driver_info(
-                    "已启动 VB-CABLE 官方安装程序（会请求管理员权限）。请按提示完成安装并"
-                    "重启电脑，然后点击「重新检测」确认两个虚拟音频端点已出现。"
+                    "VB-CABLE 安装程序已打开。请先完成安装并重启电脑，回来后点击「重新检测」。"
                 )
 
     _qt_classes_cache = {

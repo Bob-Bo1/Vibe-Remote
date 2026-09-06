@@ -1,9 +1,10 @@
 """Writes decoded ATVV PCM to the one user-selected Windows output endpoint.
 
 Windows-only (``sounddevice``/PortAudio). Never touches the system default
-device: it always opens the specific endpoint the user picked by name, and
-raises immediately if that endpoint can't be opened - callers must treat
-that as "voice fails closed, buttons keep working" (see audio_output.py).
+device: when CABLE is enabled, it opens the specific endpoint the user picked
+by name and raises immediately if that endpoint cannot be opened. With no
+CABLE selection, the host voice application uses its own/default microphone
+and this sink is not constructed (see audio_output.py).
 """
 
 from __future__ import annotations

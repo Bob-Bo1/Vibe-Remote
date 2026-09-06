@@ -37,7 +37,7 @@ class DefaultConfigPrivacyTests(unittest.TestCase):
         defaults = config.default_key_bindings()
         self.assertFalse(config.FORBIDDEN_KEYS.intersection(defaults.keys()))
 
-    def test_output_endpoint_defaults_to_empty_so_voice_fails_closed(self):
+    def test_output_endpoint_defaults_to_empty_for_host_microphone_fallback(self):
         self.assertEqual(config.default_config()["output_endpoint_name"], "")
 
     def test_hid_report_tap_is_opt_in(self):

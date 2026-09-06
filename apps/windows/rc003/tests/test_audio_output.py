@@ -108,6 +108,23 @@ class CableEndpointMatchingTests(unittest.TestCase):
         # closes the parenthesis is not a real host-API decoration.
         self.assertFalse(audio_output.is_cable_input_endpoint("CABLE Input (unterminated"))
 
+    def test_choose_cable_input_prefers_wasapi_view(self):
+        endpoints = [
+            audio_output.AudioEndpoint(name="CABLE Input", host_api="Windows DirectSound"),
+            audio_output.AudioEndpoint(name="CABLE Input", host_api="Windows WASAPI"),
+        ]
+        self.assertEqual(
+            audio_output.choose_cable_input_endpoint(endpoints),
+            endpoints[1],
+        )
+
+    def test_choose_cable_input_stays_ambiguous_without_unique_wasapi_view(self):
+        endpoints = [
+            audio_output.AudioEndpoint(name="CABLE Input", host_api="A"),
+            audio_output.AudioEndpoint(name="CABLE Input", host_api="B"),
+        ]
+        self.assertIsNone(audio_output.choose_cable_input_endpoint(endpoints))
+
 
 class EnumerateEndpointsWithoutSounddeviceTests(unittest.TestCase):
     """Both enumerate_output_endpoints() and enumerate_input_endpoints() must

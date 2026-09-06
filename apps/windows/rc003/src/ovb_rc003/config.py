@@ -94,8 +94,9 @@ def default_config() -> Dict[str, Any]:
             key_mapping.VoiceTriggerMode.HOLD
         ),
         "voice_trigger_mode": key_mapping.VoiceTriggerMode.HOLD.value,
-        # Empty until the user explicitly picks one in settings; voice fails
-        # closed while this is empty (see audio_output.resolve_selected_endpoint).
+        # Empty until the user explicitly picks CABLE Input; this selects the
+        # host voice application's own/default microphone path. CABLE is an
+        # optional remote-audio enhancement (see app.py).
         # Both fields together disambiguate endpoints that share a display
         # name across host APIs (e.g. the same device exposed via both
         # Windows WASAPI and MME) - name alone is not always unique.

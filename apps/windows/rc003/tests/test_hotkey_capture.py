@@ -80,5 +80,29 @@ class HotkeyCaptureStateTests(unittest.TestCase):
         self.assertEqual(captured, [])
 
 
+class QtHotkeyFallbackTests(unittest.TestCase):
+    def test_qt_key_fallback_maps_plain_and_modifier_keys(self):
+        self.assertEqual(
+            hotkey_capture_windows.token_for_qt_key_event(0x41),
+            "a",
+        )
+        self.assertEqual(
+            hotkey_capture_windows.token_for_qt_key_event(0x01000021),
+            "lctrl",
+        )
+
+    def test_qt_fallback_emits_one_chord_after_the_last_key_up(self):
+        captured = []
+        state = hotkey_capture_windows.HotkeyChordState(captured.append)
+
+        state.handle_token("lctrl", True)
+        state.handle_token("a", True)
+        state.handle_token("a", False)
+        self.assertEqual(captured, [])
+        state.handle_token("lctrl", False)
+
+        self.assertEqual(captured, ["lctrl+a"])
+
+
 if __name__ == "__main__":
     unittest.main()

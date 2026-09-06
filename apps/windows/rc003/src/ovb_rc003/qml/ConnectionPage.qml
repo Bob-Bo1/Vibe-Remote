@@ -25,11 +25,17 @@ Item {
         return cableCheck().status === "pass"
     }
 
+    function cableRestartRequired() {
+        diagnosticsRevision
+        return DiagnosticsController.driverRestartRequired && !cableReady()
+    }
+
     function cableStatusLabel() {
         diagnosticsRevision
         var status = cableCheck().status
         if (status === "pass") return qsTr("已检测到")
-        if (status === "fail") return qsTr("未安装或未完整安装")
+        if (cableRestartRequired()) return qsTr("等待重启")
+        if (status === "fail") return qsTr("未配置（可选）")
         if (status === "unsupported") return qsTr("暂时无法检测")
         return qsTr("正在检测")
     }
@@ -38,8 +44,20 @@ Item {
         diagnosticsRevision
         var status = cableCheck().status
         if (status === "pass") return tokens.successColor
-        if (status === "fail") return tokens.errorColor
+        if (cableRestartRequired()) return tokens.voiceAccent
+        if (status === "fail") return tokens.voiceAccent
         return tokens.voiceAccent
+    }
+
+    function cableDescription() {
+        diagnosticsRevision
+        if (root.cableReady())
+            return qsTr("已检测到 CABLE Input 和 CABLE Output。点击“使用 CABLE Input”后，遥控器麦克风声音会进入微信或豆包；未选择时，录音软件使用 Windows 默认麦克风。")
+        if (root.cableRestartRequired())
+            return qsTr("安装程序已打开。完成安装后请重启电脑，回来后点击“重新检测”。")
+        if (root.cableCheck().status === "fail")
+            return qsTr("可选：选择 CABLE Input 后，遥控器麦克风声音会进入微信或豆包；未选择时，录音软件使用 Windows 默认麦克风。")
+        return root.cableCheck().detail
     }
 
     Dialog {
@@ -272,8 +290,10 @@ Item {
                         Layout.fillWidth: true
                         radius: tokens.cornerRadiusLarge
                         color: tokens.surface
-                        border.color: root.cableReady() ? tokens.successColor : tokens.border
-                        border.width: root.cableReady() ? 2 : 1
+                        border.color: root.cableReady()
+                            ? tokens.successColor
+                            : (root.cableRestartRequired() ? tokens.voiceAccent : tokens.border)
+                        border.width: root.cableReady() || root.cableRestartRequired() ? 2 : 1
                         implicitHeight: cableStepColumn.implicitHeight + 28
 
                         RowLayout {
@@ -301,7 +321,7 @@ Item {
                                     Layout.fillWidth: true
                                     Label {
                                         Layout.fillWidth: true
-                                        text: qsTr("准备语音通道")
+                                        text: qsTr("准备语音通道（可选）")
                                         font.pixelSize: tokens.fontSizeTitle
                                         font.bold: true
                                         color: tokens.textPrimary
@@ -316,16 +336,14 @@ Item {
                                 Label {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
-                                    text: root.cableReady()
-                                        ? qsTr("工具输出使用 CABLE Input；微信或豆包的麦克风选择 CABLE Output。")
-                                        : root.cableCheck().detail
+                                    text: root.cableDescription()
                                     color: tokens.textSecondary
                                     font.pixelSize: tokens.fontSizeSmall
                                 }
                                 RowLayout {
                                     spacing: 8
                                     AppButton {
-                                        visible: !root.cableReady()
+                                        visible: !root.cableReady() && !root.cableRestartRequired()
                                         text: qsTr("安装 VB-CABLE")
                                         highlighted: true
                                         onClicked: cableConfirmDialog.open()
@@ -339,6 +357,38 @@ Item {
                                         text: qsTr("重新检测")
                                         enabled: !DiagnosticsController.isRefreshing
                                         onClicked: DiagnosticsController.refreshDiagnostics()
+                                    }
+                                }
+                                Rectangle {
+                                    objectName: "cableRestartNotice"
+                                    Layout.fillWidth: true
+                                    visible: root.cableRestartRequired()
+                                    radius: tokens.cornerRadiusSmall
+                                    color: tokens.dark ? "#3A2B15" : "#FFF4DF"
+                                    border.color: tokens.voiceAccent
+                                    border.width: 1
+                                    implicitHeight: restartNoticeColumn.implicitHeight + 16
+
+                                    ColumnLayout {
+                                        id: restartNoticeColumn
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.top: parent.top
+                                        anchors.margins: 8
+                                        spacing: 3
+                                        Label {
+                                            text: qsTr("安装后需要重启电脑")
+                                            color: tokens.voiceAccent
+                                            font.pixelSize: tokens.fontSizeBody
+                                            font.bold: true
+                                        }
+                                        Label {
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                            text: qsTr("请完成 VB-CABLE 安装并重启 Windows。重启后打开本工具，点击“重新检测”确认语音通道。")
+                                            color: tokens.textPrimary
+                                            font.pixelSize: tokens.fontSizeSmall
+                                        }
                                     }
                                 }
                                 Label {

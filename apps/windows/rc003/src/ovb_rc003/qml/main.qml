@@ -78,7 +78,7 @@ ApplicationWindow {
                 Item { Layout.fillHeight: true }
                 Rectangle { Layout.fillWidth: true; height: 1; color: tokens.border }
                 Label { text: qsTr("小米蓝牙遥控器 2 Pro"); color: tokens.textSecondary; font.pixelSize: 11; Layout.topMargin: 10 }
-                Label { text: "RC003  ·  v22"; color: tokens.disabledText; font.pixelSize: 11 }
+                Label { text: "RC003  ·  v30"; color: tokens.disabledText; font.pixelSize: 11 }
                 Item { Layout.preferredHeight: 6 }
             }
         }

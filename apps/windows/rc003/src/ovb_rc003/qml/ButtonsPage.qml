@@ -29,7 +29,7 @@ Item {
 
     Dialog {
         id: shortcutRecorder
-        objectName: "shortcutRecorderDialog"
+        objectName: "legacyShortcutRecorderDialog"
         modal: true
         anchors.centerIn: parent
         width: 430
@@ -45,10 +45,15 @@ Item {
             previewText = chord
             if (isMic)
                 SettingsController.hotkeyText = chord
-            else if (trigger === "single_click")
-                ButtonMappingModel.setActionTextAt(rowIndex, chord)
-            else
-                ButtonMappingModel.setSecondaryActionTextAt(rowIndex, trigger, chord)
+            else {
+                var targetRow = ButtonMappingModel.indexOfButton(buttonId)
+                if (targetRow < 0)
+                    targetRow = rowIndex
+                if (trigger === "single_click")
+                    ButtonMappingModel.setActionTextAt(targetRow, chord)
+                else
+                    ButtonMappingModel.setSecondaryActionTextAt(targetRow, trigger, chord)
+            }
             close()
         }
 
@@ -75,6 +80,27 @@ Item {
             id: captureArea
             implicitHeight: 150
             focus: true
+
+            Keys.onPressed: {
+                event.accepted = true
+                if (!event.isAutoRepeat)
+                    SettingsController.captureQtHotkeyKey(
+                        event.key,
+                        event.nativeVirtualKey || 0,
+                        event.nativeScanCode || 0,
+                        true
+                    )
+            }
+            Keys.onReleased: {
+                event.accepted = true
+                if (!event.isAutoRepeat)
+                    SettingsController.captureQtHotkeyKey(
+                        event.key,
+                        event.nativeVirtualKey || 0,
+                        event.nativeScanCode || 0,
+                        false
+                    )
+            }
 
             ColumnLayout {
                 anchors.fill: parent

@@ -80,6 +80,68 @@ _GENERIC_MODIFIER_BY_PHYSICAL_KEY: Dict[Tuple[int, bool], str] = {
 
 _GENERIC_MODIFIER_VKS = {0x10, 0x11, 0x12}
 
+_QT_KEY_TO_TOKEN = {
+    0x01000000: "escape",
+    0x01000001: "tab",
+    0x01000003: "backspace",
+    0x01000004: "enter",
+    0x01000005: "enter",
+    0x01000006: "insert",
+    0x01000007: "delete",
+    0x01000010: "home",
+    0x01000011: "end",
+    0x01000012: "left",
+    0x01000013: "up",
+    0x01000014: "right",
+    0x01000015: "down",
+    0x01000016: "page_up",
+    0x01000017: "page_down",
+    0x01000020: "lshift",
+    0x01000021: "lctrl",
+    0x01000022: "lwin",
+    0x01000023: "lalt",
+    0x01000024: "caps_lock",
+    0x01000025: "num_lock",
+    0x01000026: "scroll_lock",
+    0x01000030: "f1",
+    0x01000031: "f2",
+    0x01000032: "f3",
+    0x01000033: "f4",
+    0x01000034: "f5",
+    0x01000035: "f6",
+    0x01000036: "f7",
+    0x01000037: "f8",
+    0x01000038: "f9",
+    0x01000039: "f10",
+    0x0100003A: "f11",
+    0x0100003B: "f12",
+    0x0100003C: "f13",
+    0x0100003D: "f14",
+    0x0100003E: "f15",
+    0x0100003F: "f16",
+    0x01000040: "f17",
+    0x01000041: "f18",
+    0x01000042: "f19",
+    0x01000043: "f20",
+    0x01000044: "f21",
+    0x01000045: "f22",
+    0x01000046: "f23",
+    0x01000047: "f24",
+    0x20: "space",
+    0x2B: "equals",
+    0x2C: "comma",
+    0x2D: "minus",
+    0x2E: "period",
+    0x2F: "slash",
+    0x3B: "semicolon",
+    0x3D: "equals",
+    0x5B: "left_bracket",
+    0x5C: "backslash",
+    0x5D: "right_bracket",
+    0x60: "backtick",
+    0xDE: "quote",
+}
+
 
 def _reverse_vk_table() -> Dict[int, str]:
     reverse: Dict[int, str] = {}
@@ -114,7 +176,61 @@ def token_for_keyboard_event(vk_code: int, scan_code: int, flags: int) -> str:
     return f"vk_{vk:02x}"
 
 
+def token_for_qt_key_event(
+    qt_key: int,
+    native_vk: int = 0,
+    native_scan: int = 0,
+    native_flags: int = 0,
+) -> str:
+    """Return a mapping token from a focused Qt key event.
+
+    Qt exposes the native VK/scan code on Windows. Prefer those values so
+    right/left modifiers survive the local-window fallback. The Qt key table
+    remains a portable fallback for test events and platforms that omit the
+    native fields.
+    """
+
+    if int(native_vk):
+        return token_for_keyboard_event(native_vk, native_scan, native_flags)
+    key = int(qt_key)
+    if 0x41 <= key <= 0x5A:
+        return chr(key + 0x20)
+    if 0x30 <= key <= 0x39:
+        return chr(key)
+    token = _QT_KEY_TO_TOKEN.get(key)
+    if token is not None:
+        return token
+    return f"qt_{key:08x}"
+
+
 CaptureCallback = Callable[[str], None]
+
+
+class HotkeyChordState:
+    """Collect key tokens until the final pressed key is released."""
+
+    def __init__(self, on_captured: CaptureCallback) -> None:
+        self._on_captured = on_captured
+        self._tokens: List[str] = []
+        self._pressed_tokens: Set[str] = set()
+
+    def reset(self) -> None:
+        self._tokens.clear()
+        self._pressed_tokens.clear()
+
+    def handle_token(self, token: str, is_down: bool) -> bool:
+        if is_down:
+            if token not in self._pressed_tokens:
+                self._pressed_tokens.add(token)
+                self._tokens.append(token)
+            return True
+        if token in self._pressed_tokens:
+            self._pressed_tokens.remove(token)
+        if not self._pressed_tokens and self._tokens:
+            chord = "+".join(self._tokens)
+            self.reset()
+            self._on_captured(chord)
+        return True
 
 
 class HotkeyCapture:

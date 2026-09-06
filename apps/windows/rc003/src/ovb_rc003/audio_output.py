@@ -1,13 +1,13 @@
-"""User-selected audio output endpoint resolution, with a strict fail-closed
-policy: voice never falls back to the system default device.
+"""User-selected audio output endpoint resolution.
 
 Enumeration and PCM playback (Windows-only, via the ``sounddevice`` package)
 are separated from the selection logic below so the selection/fail-closed
 contract is unit-testable on any OS without the real dependency installed.
 
 This module never changes which device Windows considers "default" for
-anything; it only ever writes PCM to the one endpoint the user explicitly
-picked in the settings UI, by name, each time a voice session starts.
+anything. It only writes remote PCM when the user explicitly picked an
+endpoint in the settings UI. With no selection, the host voice application
+keeps its own/default microphone path and this module opens no sink.
 """
 
 from __future__ import annotations
@@ -140,11 +140,12 @@ def _enumerate_endpoints(channel_count_key: str) -> List[AudioEndpoint]:
 # Canonical VB-CABLE (Basic/Donationware) endpoint display names, as VB-Audio's
 # own driver names them: the playback ("speaker") side the app writes decoded
 # voice PCM to, and the recording ("microphone") side a recognizer reads from.
-# Never used to auto-select anything - only to let the diagnostics page (XRBM-
-# 031) report whether the optional driver is installed, and to recognize the
-# one endpoint the "select detected CABLE Input" action is allowed to persist.
+# The diagnostics page uses these names to report whether the optional driver
+# is installed. The selection helper below also handles the normal case where
+# PortAudio exposes the same endpoint through more than one Windows host API.
 CABLE_INPUT_NAME = "CABLE Input"
 CABLE_OUTPUT_NAME = "CABLE Output"
+PREFERRED_CABLE_INPUT_HOST_API = "Windows WASAPI"
 DJI_MIC_2_NAME_PREFIXES = ("DJI-MIC2", "DJI Mic 2", "DJI Mic2")
 
 
@@ -174,6 +175,33 @@ def is_cable_output_endpoint(name: str) -> bool:
     """True if ``name`` names VB-CABLE's recording ("CABLE Output") endpoint."""
 
     return _matches_cable_endpoint(name, CABLE_OUTPUT_NAME)
+
+
+def choose_cable_input_endpoint(
+    endpoints: Sequence[AudioEndpoint],
+) -> Optional[AudioEndpoint]:
+    """Choose the standard CABLE Input endpoint when its identity is clear.
+
+    Windows commonly exposes the same playback endpoint once through WASAPI
+    and once through DirectSound. Those are two PortAudio views of one device,
+    so prefer the unique WASAPI view. If there are multiple matches without
+    one unique WASAPI candidate, return ``None`` instead of guessing between
+    devices.
+    """
+
+    matches = [
+        endpoint for endpoint in endpoints if is_cable_input_endpoint(endpoint.name)
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    wasapi_matches = [
+        endpoint
+        for endpoint in matches
+        if endpoint.host_api == PREFERRED_CABLE_INPUT_HOST_API
+    ]
+    if len(wasapi_matches) == 1:
+        return wasapi_matches[0]
+    return None
 
 
 def is_dji_mic_2_input_endpoint(name: str) -> bool:

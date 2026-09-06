@@ -420,6 +420,17 @@ class SettingsControllerTests(unittest.TestCase):
         controller.hotkeyText = "lctrl+lwin"
         self.assertEqual(controller.hotkeyText, "lctrl+lwin")
 
+    def test_qt_local_keyboard_fallback_emits_a_recorded_chord(self):
+        controller, _ = self._make_controller()
+        captured = []
+        controller.hotkeyCaptured.connect(captured.append)
+        controller._hotkey_capture_requested = True
+
+        controller.captureQtHotkeyKey(0x41, 0, 0, True)
+        controller.captureQtHotkeyKey(0x41, 0, 0, False)
+
+        self.assertEqual(captured, ["a"])
+
     def test_launch_status_starts_as_the_not_started_constant(self):
         controller, _ = self._make_controller()
         self.assertEqual(controller.launchStatusText, settings_ui.LAUNCH_NOT_STARTED_TEXT)
@@ -1042,6 +1053,25 @@ class DiagnosticsControllerTests(unittest.TestCase):
         self.assertFalse(result)
         self.assertIn("无法唯一确定", diag.driverErrorMessage)
 
+    def test_select_detected_cable_input_prefers_wasapi_view_for_same_endpoint(self):
+        settings_controller = self._make_settings_controller()
+        diag = self.DiagnosticsController(settings_controller, self._config_root)
+        self._pump_until(lambda: not diag.isRefreshing)
+
+        endpoints = [
+            audio_output.AudioEndpoint(name="CABLE Input", host_api="Windows DirectSound"),
+            audio_output.AudioEndpoint(name="CABLE Input", host_api="Windows WASAPI"),
+        ]
+        with mock.patch.object(
+            audio_output, "enumerate_output_endpoints", return_value=endpoints
+        ):
+            result = diag.selectDetectedCableInputAsOutput()
+
+        self.assertTrue(result)
+        reloaded = config.load_config(config.config_path(self._config_root))
+        self.assertEqual(reloaded["output_endpoint_name"], "CABLE Input")
+        self.assertEqual(reloaded["output_endpoint_host_api"], "Windows WASAPI")
+
     def test_launch_vb_cable_setup_reports_bundle_not_found_as_an_error(self):
         settings_controller = self._make_settings_controller()
         diag = self.DiagnosticsController(settings_controller, self._config_root)
@@ -1092,6 +1122,45 @@ class DiagnosticsControllerTests(unittest.TestCase):
         self.assertEqual(diag.driverStatusMessage, "")
         self.assertIn("重新检测", diag.driverInfoMessage)
         self.assertNotIn("安装成功", diag.driverInfoMessage)
+
+    def test_launch_vb_cable_setup_marks_restart_required_until_endpoint_recheck_passes(self):
+        settings_controller = self._make_settings_controller()
+        cable_fail = windows_diagnostics.CheckResult(
+            "vb_cable_endpoints",
+            "VB-CABLE 虚拟音频端点（可选）",
+            windows_diagnostics.CheckGroup.OPTIONAL_DRIVER,
+            windows_diagnostics.CheckStatus.FAIL,
+            "尚未发现 CABLE Input（播放）与 CABLE Output（录音）。",
+        )
+        cable_pass = windows_diagnostics.CheckResult(
+            "vb_cable_endpoints",
+            "VB-CABLE 虚拟音频端点（可选）",
+            windows_diagnostics.CheckGroup.OPTIONAL_DRIVER,
+            windows_diagnostics.CheckStatus.PASS,
+            "已发现 CABLE Input（播放）与 CABLE Output（录音）两个端点。",
+        )
+        with mock.patch.object(
+            windows_diagnostics,
+            "run_diagnostics",
+            return_value=windows_diagnostics.DiagnosticsReport((cable_fail,)),
+        ):
+            diag = self.DiagnosticsController(settings_controller, self._config_root)
+            self.assertTrue(self._pump_until(lambda: not diag.isRefreshing))
+
+        self.assertFalse(diag.driverRestartRequired)
+        with mock.patch.object(
+            vb_cable_bundle, "prepare_and_launch_vendor_setup", return_value=None
+        ):
+            diag.launchVbCableSetup()
+
+        self.assertTrue(diag.driverRestartRequired)
+        self.assertIn("重启", diag.driverInfoMessage)
+
+        diag._on_diagnostics_ready(windows_diagnostics.DiagnosticsReport((cable_fail,)))
+        self.assertTrue(diag.driverRestartRequired)
+
+        diag._on_diagnostics_ready(windows_diagnostics.DiagnosticsReport((cable_pass,)))
+        self.assertFalse(diag.driverRestartRequired)
 
 
 @unittest.skipUnless(_HAS_PYSIDE6, _SKIP_REASON)
@@ -1463,6 +1532,144 @@ class QmlLoadProbeCallsProductionShutdownHelperTests(unittest.TestCase):
         # would silently stop testing the actual crash this task fixed.
         self.assertIn("DiagnosticsController(controller,", _QML_LOAD_PROBE_SCRIPT)
         self.assertNotIn("mock", _QML_LOAD_PROBE_SCRIPT.lower())
+
+
+# Real local key events via QTest, delivered through the ACTUAL
+# QQmlApplicationEngine-loaded shortcut recorder dialog. This is kept as a
+# focused regression probe for the local-keyboard fallback: the native global
+# hook intentionally ignores QTest's injected events, so the focused QML
+# path must record the key and close the dialog.
+_HOTKEY_RECORDER_PROBE_SCRIPT = r"""
+import sys
+
+from ovb_rc003 import qt_settings_app as m
+from PySide6.QtCore import QUrl, Qt
+from PySide6.QtTest import QTest
+
+
+def _find_child(root, name):
+    for child in root.children():
+        if child.objectName() == name:
+            return child
+        found = _find_child(child, name)
+        if found is not None:
+            return found
+    return None
+
+
+def _find_descendant(root, name):
+    for child in root.children():
+        if child.objectName() == name:
+            return child
+        found = _find_descendant(child, name)
+        if found is not None:
+            return found
+    return None
+
+
+classes = m._load_qt_classes()
+QGuiApplication = classes["QGuiApplication"]
+QQmlApplicationEngine = classes["QQmlApplicationEngine"]
+QQuickStyle = classes["QQuickStyle"]
+qmlRegisterSingletonInstance = classes["qmlRegisterSingletonInstance"]
+ButtonMappingModel = classes["ButtonMappingModel"]
+SettingsController = classes["SettingsController"]
+DiagnosticsController = classes["DiagnosticsController"]
+
+QQuickStyle.setStyle("Basic")
+app = QGuiApplication.instance() or QGuiApplication([])
+model = ButtonMappingModel()
+controller = SettingsController(model)
+diagnostics_controller = DiagnosticsController(controller, m.config.config_root())
+qmlRegisterSingletonInstance(SettingsController, "OvbRc003Settings", 1, 0, "SettingsController", controller)
+qmlRegisterSingletonInstance(ButtonMappingModel, "OvbRc003Settings", 1, 0, "ButtonMappingModel", model)
+qmlRegisterSingletonInstance(DiagnosticsController, "OvbRc003Settings", 1, 0, "DiagnosticsController", diagnostics_controller)
+
+engine = QQmlApplicationEngine()
+qml_dir = m._qml_directory()
+engine.addImportPath(str(qml_dir))
+engine.load(QUrl.fromLocalFile(str(qml_dir / "main.qml")))
+assert len(engine.rootObjects()) == 1, "main.qml failed to load"
+window = engine.rootObjects()[0]
+window.show()
+for _ in range(10):
+    window.grabWindow()
+    app.processEvents()
+
+tab_bar = _find_child(window, "tabBar")
+assert tab_bar is not None
+tab_bar.setProperty("currentIndex", 1)
+for _ in range(10):
+    window.grabWindow()
+    app.processEvents()
+
+mapping_repeater = _find_child(window, "rc003MappingRepeater")
+assert mapping_repeater is not None
+mapping_list = _find_child(window, "mappingList")
+assert mapping_list is not None
+mapping_list.setProperty("currentIndex", -1)
+mapping_list.setProperty("currentIndex", model.index_of("ok"))
+for _ in range(10):
+    window.grabWindow()
+    app.processEvents()
+
+dialog = _find_child(window, "rc003ShortcutRecorderDialog")
+assert dialog is not None
+dialog.setProperty("buttonId", "ok")
+dialog.setProperty("rowIndex", -1)
+dialog.setProperty("isMic", False)
+dialog.setProperty("trigger", "single_click")
+dialog.open()
+for _ in range(10):
+    window.grabWindow()
+    app.processEvents()
+assert dialog.property("visible")
+
+current_item = mapping_list.property("currentItem")
+assert current_item is not None, repr(mapping_list.property("currentIndex"))
+action_combo = _find_descendant(current_item, "actionCombo_ok")
+assert action_combo is not None
+before_action = action_combo.property("editText")
+
+QTest.keyPress(window, Qt.Key_Control)
+QTest.keyPress(window, Qt.Key_A)
+app.processEvents()
+QTest.keyRelease(window, Qt.Key_A)
+QTest.keyRelease(window, Qt.Key_Control)
+for _ in range(10):
+    window.grabWindow()
+    app.processEvents()
+
+assert model.to_display_map()["ok"] == "lctrl+a"
+assert action_combo.property("editText") == "lctrl+a", repr((before_action, action_combo.property("editText")))
+assert not dialog.property("visible")
+controller.stopHotkeyCapture()
+m._shutdown_diagnostics_workers()
+print("OK")
+"""
+
+
+@unittest.skipUnless(_HAS_PYSIDE6, _SKIP_REASON)
+class ShortcutRecorderLocalKeyboardIntegrationTests(unittest.TestCase):
+    def test_qml_recorder_accepts_a_focused_local_key(self):
+        import subprocess
+
+        env = dict(os.environ)
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        env["LOCALAPPDATA"] = tempfile.mkdtemp()
+        result = subprocess.run(
+            [sys.executable, "-c", _HOTKEY_RECORDER_PROBE_SCRIPT],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            f"shortcut recorder probe failed: {result.stdout}\n{result.stderr}",
+        )
+        self.assertIn("OK", result.stdout)
 
 
 # Real mouse clicks and real key events via QTest, delivered through the
@@ -2161,6 +2368,7 @@ class SimplifiedSettingsNavigationContractTests(unittest.TestCase):
         )
         self.assertIn('index === 2 ? "diagnosticsTabButton"', main_text)
         self.assertIn("DiagnosticsPage { tokens: window.tokens }", main_text)
+        self.assertIn('text: "RC003  ·  v30"', main_text)
         self.assertNotIn("PermissionsPage", main_text)
         self.assertNotIn("系统权限", main_text)
         self.assertNotIn("检查与修复", main_text)
@@ -2183,6 +2391,33 @@ class SimplifiedSettingsNavigationContractTests(unittest.TestCase):
 
         self.assertIn('rows[i].checkId === "vb_cable_endpoints"', connection_text)
         self.assertNotIn('rows[i].id === "vb_cable_endpoints"', connection_text)
+
+    def test_connection_cable_card_has_a_persistent_restart_notice(self):
+        connection_text = (self._QML_DIR / "ConnectionPage.qml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("DiagnosticsController.driverRestartRequired", connection_text)
+        self.assertIn('objectName: "cableRestartNotice"', connection_text)
+        self.assertIn('qsTr("等待重启")', connection_text)
+        self.assertIn('qsTr("安装后需要重启电脑")', connection_text)
+        self.assertIn('qsTr("安装程序已打开。完成安装后请重启电脑', connection_text)
+
+    def test_shortcut_recorder_has_a_focused_qt_keyboard_fallback(self):
+        for page_name in ("ButtonsPage.qml", "Rc003MappingPage.qml"):
+            page_text = (self._QML_DIR / page_name).read_text(encoding="utf-8")
+            self.assertIn("Keys.onPressed", page_text)
+            self.assertIn("Keys.onReleased", page_text)
+            self.assertIn("SettingsController.captureQtHotkeyKey", page_text)
+
+    def test_connection_cable_card_explains_optional_system_microphone_mode(self):
+        connection_text = (self._QML_DIR / "ConnectionPage.qml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('qsTr("准备语音通道（可选）")', connection_text)
+        self.assertIn('qsTr("未配置（可选）")', connection_text)
+        self.assertIn("Windows 默认麦克风", connection_text)
 
 
 if __name__ == "__main__":

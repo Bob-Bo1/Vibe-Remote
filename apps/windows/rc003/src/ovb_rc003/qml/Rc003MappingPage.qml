@@ -61,7 +61,7 @@ Item {
 
     Dialog {
         id: shortcutRecorder
-        objectName: "shortcutRecorderDialog"
+        objectName: "rc003ShortcutRecorderDialog"
         modal: true
         anchors.centerIn: parent
         width: 430
@@ -78,10 +78,17 @@ Item {
             previewText = chord
             if (isMic)
                 SettingsController.hotkeyText = chord
-            else if (trigger === "single_click")
-                ButtonMappingModel.setActionTextAt(rowIndex, chord)
-            else
-                ButtonMappingModel.setSecondaryActionTextAt(rowIndex, trigger, chord)
+            else {
+                // Delegate indexes can change while the dialog is open. Resolve
+                // the stable device button id again when writing the result.
+                var targetRow = ButtonMappingModel.indexOfButton(buttonId)
+                if (targetRow < 0)
+                    targetRow = rowIndex
+                if (trigger === "single_click")
+                    ButtonMappingModel.setActionTextAt(targetRow, chord)
+                else
+                    ButtonMappingModel.setSecondaryActionTextAt(targetRow, trigger, chord)
+            }
             close()
         }
 
@@ -108,6 +115,27 @@ Item {
             id: captureArea
             implicitHeight: 150
             focus: true
+
+            Keys.onPressed: {
+                event.accepted = true
+                if (!event.isAutoRepeat)
+                    SettingsController.captureQtHotkeyKey(
+                        event.key,
+                        event.nativeVirtualKey || 0,
+                        event.nativeScanCode || 0,
+                        true
+                    )
+            }
+            Keys.onReleased: {
+                event.accepted = true
+                if (!event.isAutoRepeat)
+                    SettingsController.captureQtHotkeyKey(
+                        event.key,
+                        event.nativeVirtualKey || 0,
+                        event.nativeScanCode || 0,
+                        false
+                    )
+            }
 
             ColumnLayout {
                 anchors.fill: parent
@@ -305,6 +333,7 @@ Item {
 
                     Repeater {
                         id: mappingRepeater
+                        objectName: "rc003MappingRepeater"
                         model: ButtonMappingModel
 
                         delegate: Rectangle {
@@ -324,6 +353,13 @@ Item {
                             required property real hotspotY
 
                             objectName: "mappingCard_" + buttonId
+                            // ComboBox(editable: true) keeps its own editText
+                            // state, so a model dataChanged signal does not
+                            // refresh the text by itself. Keep all three
+                            // visible editors synchronized with this row.
+                            onActionTextChanged: actionCombo.editText = actionText
+                            onDoubleClickTextChanged: doubleActionCombo.editText = doubleClickText
+                            onLongPressTextChanged: longActionCombo.editText = longPressText
                             width: mappingStage.sideColumnWidth
                             height: mappingList.cardHeight
                             x: root.isLeft(index)

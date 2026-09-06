@@ -18,11 +18,14 @@ guarantees ``_cleanup_once()`` runs before the next connect attempt.
 (which sends MIC_CLOSE, unsubscribes, and closes the device/service) - every
 step is individually wrapped so one step's failure never skips the rest.
 
-Voice fail-closed ordering (P1 #3): the output endpoint is resolved and
-opened BEFORE any hotkey/MIC_OPEN is sent, not lazily after the device has
-already started streaming. If the endpoint is missing or fails to open,
-neither the hotkey nor MIC_OPEN are sent at all - voice fails fully closed
-while ordinary buttons keep working.
+Voice routing ordering (P1 #3): when the user has selected a CABLE output
+endpoint, it is resolved and opened BEFORE any hotkey/MIC_OPEN is sent, not
+lazily after the device has already started streaming. An empty endpoint is
+intentional system-microphone mode: the host hotkey and MIC_OPEN still go
+through, while this app does not create a remote-PCM playback sink and the
+target voice app can use Windows' own microphone. A selected endpoint that
+is missing or fails to open still fails closed, protecting users from an
+unexpected or ambiguous audio route.
 
 Further fail-closed ordering (XRBM-018, fixing XRBM-014 review round 2 P1
 #6): the host hotkey is now sent BEFORE MIC_OPEN, and if it fails to fully
@@ -450,14 +453,20 @@ class RC003App:
         suppressor.arm_key_event(vk_code, make_code, extended, is_pressed)
 
     def _prewarm_voice_playback(self) -> None:
-        """Open the selected voice output while the BLE session is idle.
+        """Open the selected CABLE output while the BLE session is idle.
 
-        Failure remains voice-only: the regular mic path retries the endpoint
-        on demand and still fails closed if it is unavailable.  Keeping this
-        best-effort preserves ordinary button operation and reconnects.
+        An empty selection is the normal Windows-microphone path, so there is
+        nothing to prewarm. A selected endpoint is still opened here as a
+        best-effort optimization; the regular mic path retries it on demand
+        and fails closed if the explicitly selected endpoint is unavailable.
         """
 
         if self._playback is not None:
+            return
+        if not str(self._config.get("output_endpoint_name") or "").strip():
+            self._logger.info(
+                "startup: CABLE output not selected; voice app will use Windows default microphone"
+            )
             return
         if self._open_playback_for_new_session():
             self._logger.info("startup: voice playback prewarmed")
@@ -1203,15 +1212,14 @@ class RC003App:
         send_device_open: bool = True,
         host_action_handled: bool = False,
     ) -> None:
-        """Resolve and open the user-selected output endpoint FIRST; only
-        send the hotkey if that succeeds, and only send MIC_OPEN if the
-        hotkey itself fully delivered. This is the fail-closed ordering
-        XRBM-014 review RETRY P1 #3 (endpoint) and review round 2 P1 #6
-        (hotkey) both require: a device streaming audio into Windows
-        without the configured hotkey having actually engaged voice typing
-        is exactly the "opens after host-trigger failure" defect - so
-        failure at either step suppresses MIC_OPEN, not just a missing
-        endpoint.
+        """Start the host voice shortcut and optional device voice session.
+
+        With no selected CABLE output, the target app keeps using its own
+        Windows microphone, so the host shortcut and MIC_OPEN still need to
+        be delivered. When the user explicitly selected CABLE, the sink must
+        open first; a missing/ambiguous/unavailable selection suppresses both
+        actions. In every mode MIC_OPEN remains gated by successful host
+        shortcut delivery.
         """
 
         if self._ble_session is None:
@@ -1220,11 +1228,20 @@ class RC003App:
 
         self._voice_audio_started_waiting_for_legacy_f5 = False
 
-        if not self._open_playback_for_new_session():
+        playback_ready = self._open_playback_for_new_session()
+        endpoint_selected = bool(
+            str(self._config.get("output_endpoint_name") or "").strip()
+        )
+        if not playback_ready and endpoint_selected:
             self._logger.info(
-                "voice failing closed: no usable output endpoint; hotkey/MIC_OPEN suppressed"
+                "voice failing closed: selected CABLE output endpoint unavailable; "
+                "hotkey/MIC_OPEN suppressed"
             )
             return
+        if not playback_ready:
+            self._logger.info(
+                "voice using host microphone: no CABLE output endpoint selected"
+            )
 
         action = self._voice.on_mic_button_pressed()
         action_delivered = (
@@ -1328,8 +1345,37 @@ class RC003App:
     def _open_playback_for_new_session(self) -> bool:
         if self._playback is not None:
             return True
+        # The packaged settings page and the integrated bridge share one
+        # process, but the bridge object may have been created before the
+        # user selected CABLE Input.  Reload the two endpoint fields at the
+        # start of every new voice session so an explicit settings change is
+        # effective without requiring a second, hidden restart step.
+        try:
+            saved_config = config.load_config(
+                config.config_path(self._config_root)
+            )
+        except Exception:  # noqa: BLE001 - keep the previous safe state
+            self._logger.info("voice output endpoint reload skipped")
+        else:
+            saved_name = saved_config.get("output_endpoint_name", "")
+            saved_host_api = saved_config.get("output_endpoint_host_api", "")
+            if (
+                saved_name != self._config.get("output_endpoint_name", "")
+                or saved_host_api != self._config.get("output_endpoint_host_api", "")
+            ):
+                self._config["output_endpoint_name"] = saved_name
+                self._config["output_endpoint_host_api"] = saved_host_api
+                self._logger.info(
+                    "voice output endpoint reloaded from saved settings"
+                )
         endpoint_name = self._config.get("output_endpoint_name") or ""
         endpoint_host_api = self._config.get("output_endpoint_host_api") or ""
+        if not str(endpoint_name).strip():
+            self._logger.info(
+                "voice playback not selected; target voice app will use Windows default microphone"
+            )
+            self._playback = None
+            return False
         try:
             endpoints = audio_output.enumerate_output_endpoints()
             selected_endpoint = audio_output.resolve_selected_endpoint(

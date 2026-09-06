@@ -55,7 +55,7 @@ Windows 系统录音输入页面，绝不会启动 RC003 BLE/HID/ATVV 桥接。D
 首选来源是本仓库的 Releases 列表页——这是列表页本身，不是指向某个具体
 tag 的链接，因此始终是获取最新预发行版的稳定入口，请直接使用这个地址：
 
-  https://github.com/miaomiaozii/windows-remote-mic-app/releases
+  https://github.com/Bob-Bo1/Vibe-Remote/releases
 
 在列表中找到本 RC003 Windows 候选对应的预发行版（预发行版会明确标记为
 prerelease，发布说明会写清楚它基于哪一次真实 Windows CI 运行）。
@@ -362,7 +362,7 @@ $env:PYTHONPATH = Join-Path (Get-Location) 'src'
 ```
 
 Windows GitHub Actions 工作流位于 `.github/workflows/windows-rc003-ci.yml`。运行结果
-可在 <https://github.com/miaomiaozii/windows-remote-mic-app/actions> 查看。CI 没有真实 RC003 硬件，
+可在 <https://github.com/Bob-Bo1/Vibe-Remote/actions> 查看。CI 没有真实 RC003 硬件，
 因此构建和测试通过也不能替代真机配对、按键和语音链路验收。
 
 ## 已知限制
@@ -399,9 +399,9 @@ Frida Gadget 实现；Frida 的版本、哈希和许可证见仓库根目录
 
 Windows 版本以正式版发布。首个正式发布：
 
-- 发布列表页：<https://github.com/miaomiaozii/windows-remote-mic-app/releases>
-- 正式版 `v0.1.0-windows`：<https://github.com/miaomiaozii/windows-remote-mic-app/releases/tag/v0.1.0-windows>
-- 候选版 `v0.1.0-windows-rc003-candidate.1`（历史）：<https://github.com/miaomiaozii/windows-remote-mic-app/releases/tag/v0.1.0-windows-rc003-candidate.1>
+- 发布列表页：<https://github.com/Bob-Bo1/Vibe-Remote/releases>
+- 当前候选版 `v0.1.0-windows-rc003-candidate.2`：<https://github.com/Bob-Bo1/Vibe-Remote/releases/tag/v0.1.0-windows-rc003-candidate.2>
+- 历史候选版 `v0.1.0-windows-rc003-candidate.1`：原上游发布记录，仅作历史参考。
 
 正式版资产文件名沿用构建流程的内部版本号 `0.1.0-candidate`；Release tag 为
 `v0.1.0-windows`。
