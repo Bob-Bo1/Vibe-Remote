@@ -328,7 +328,7 @@ class InnoSetupScriptTests(unittest.TestCase):
         # runs/removes the driver, never elevates) without denying the
         # bundled/launchable reality.
         self.assertIn("vb-cable", self.text.lower())
-        self.assertIn("检查与修复", self.text)
+        self.assertIn("连接与配置", self.text)
         self.assertIn("UAC", self.text)
         self.assertNotIn(
             "no vb-cable or any other driver package is installed, configured, or",

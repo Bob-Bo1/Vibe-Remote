@@ -2142,5 +2142,48 @@ class ButtonsPageComboPopupTests(unittest.TestCase):
         self.assertIn("OK", result.stdout)
 
 
+class SimplifiedSettingsNavigationContractTests(unittest.TestCase):
+    """The visible settings flow has one job per page.
+
+    These guards intentionally inspect the real QML sources so removing a
+    page from the navigation cannot accidentally leave a dead import,
+    unreachable fourth StackLayout item, or a stale CABLE field binding.
+    """
+
+    _QML_DIR = Path(__file__).resolve().parents[1] / "src" / "ovb_rc003" / "qml"
+
+    def test_navigation_has_connection_mapping_and_diagnostics_only(self):
+        main_text = (self._QML_DIR / "main.qml").read_text(encoding="utf-8")
+
+        self.assertIn(
+            'model: [qsTr("连接与配置"), SettingsController.mappingPageTitle, qsTr("诊断")]',
+            main_text,
+        )
+        self.assertIn('index === 2 ? "diagnosticsTabButton"', main_text)
+        self.assertIn("DiagnosticsPage { tokens: window.tokens }", main_text)
+        self.assertNotIn("PermissionsPage", main_text)
+        self.assertNotIn("系统权限", main_text)
+        self.assertNotIn("检查与修复", main_text)
+
+    def test_diagnostics_page_keeps_only_status_and_log_entry(self):
+        diagnostics_text = (self._QML_DIR / "DiagnosticsPage.qml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("打开日志目录", diagnostics_text)
+        self.assertIn("SettingsController.statusMessage", diagnostics_text)
+        self.assertNotIn("检测概览", diagnostics_text)
+        self.assertNotIn("driverConfirmDialog", diagnostics_text)
+        self.assertFalse((self._QML_DIR / "PermissionsPage.qml").exists())
+
+    def test_connection_cable_card_reads_the_controller_check_id(self):
+        connection_text = (self._QML_DIR / "ConnectionPage.qml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('rows[i].checkId === "vb_cable_endpoints"', connection_text)
+        self.assertNotIn('rows[i].id === "vb_cable_endpoints"', connection_text)
+
+
 if __name__ == "__main__":
     unittest.main()

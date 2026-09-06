@@ -13,7 +13,7 @@
 ;     referenced anywhere in this project at all). The application frozen
 ;     under {#DistDir} (packaged wholesale by the [Files] entry below) DOES
 ;     carry the official, unmodified VB-CABLE Basic package as opaque
-;     application data, and its OWN "检查与修复" settings page can
+;     application data, and its OWN "连接与配置" settings page can
 ;     optionally launch the vendor's original setup UI, gated behind its
 ;     own in-app confirmation and a SEPARATE, real Windows UAC prompt -
 ;     never this installer, never silently, and only after the app is

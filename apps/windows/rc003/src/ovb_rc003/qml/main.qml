@@ -43,12 +43,13 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     spacing: 6
                     Repeater {
-                        model: [qsTr("连接与配置"), SettingsController.mappingPageTitle, qsTr("系统权限"), qsTr("检查与修复")]
+                        model: [qsTr("连接与配置"), SettingsController.mappingPageTitle, qsTr("诊断")]
                         delegate: AppButton {
                             id: navButton
                             required property int index
                             required property string modelData
-                            objectName: index === 0 ? "connectionTabButton" : (index === 3 ? "diagnosticsTabButton" : "navigationButton" + index)
+                            readonly property int iconIndex: index === 2 ? 3 : index
+                            objectName: index === 0 ? "connectionTabButton" : (index === 2 ? "diagnosticsTabButton" : "navigationButton" + index)
                             Layout.fillWidth: true
                             implicitHeight: 42
                             text: modelData
@@ -60,7 +61,7 @@ ApplicationWindow {
                             contentItem: RowLayout {
                                 spacing: 11
                                 Image {
-                                    source: "assets/nav-" + index + (navButton.highlighted ? "-white" : (tokens.dark ? "-light" : "")) + ".svg"
+                                    source: "assets/nav-" + navButton.iconIndex + (navButton.highlighted ? "-white" : (tokens.dark ? "-light" : "")) + ".svg"
                                     Layout.preferredWidth: 18; Layout.preferredHeight: 18
                                 }
                                 Text { text: modelData; font.pixelSize: 13; font.family: window.font.family; color: navButton.highlighted ? "white" : tokens.textPrimary; Layout.fillWidth: true }
@@ -77,7 +78,7 @@ ApplicationWindow {
                 Item { Layout.fillHeight: true }
                 Rectangle { Layout.fillWidth: true; height: 1; color: tokens.border }
                 Label { text: qsTr("小米蓝牙遥控器 2 Pro"); color: tokens.textSecondary; font.pixelSize: 11; Layout.topMargin: 10 }
-                Label { text: "RC003  ·  v21"; color: tokens.disabledText; font.pixelSize: 11 }
+                Label { text: "RC003  ·  v22"; color: tokens.disabledText; font.pixelSize: 11 }
                 Item { Layout.preferredHeight: 6 }
             }
         }
@@ -89,12 +90,12 @@ ApplicationWindow {
                 Layout.margins: 24; Layout.bottomMargin: 4
                 spacing: 7
                 Label {
-                    text: [qsTr("连接与配置"), SettingsController.mappingPageTitle, qsTr("系统权限"), qsTr("检查与修复")][tabBar.currentIndex]
+                    text: [qsTr("连接与配置"), SettingsController.mappingPageTitle, qsTr("诊断")][tabBar.currentIndex]
                     font.pixelSize: 28; font.weight: Font.DemiBold; color: tokens.textPrimary
                 }
                 Label {
                     Layout.fillWidth: true
-                    text: [qsTr("按顺序完成连接、语音通道和快捷键配置。"), qsTr("点选遥控器上的按键，设置你顺手的操作。"), qsTr("在 Windows 中管理蓝牙、麦克风和语音权限。"), qsTr("查看检测结果，按提示解决连接和输入问题。")][tabBar.currentIndex]
+                    text: [qsTr("按顺序完成连接、语音通道和快捷键配置。"), qsTr("点选遥控器上的按键，设置你顺手的操作。"), qsTr("遇到连接或输入问题时，查看诊断信息和运行日志。")][tabBar.currentIndex]
                     font.pixelSize: 13; color: tokens.textSecondary; wrapMode: Text.WordWrap
                 }
             }
@@ -103,7 +104,6 @@ ApplicationWindow {
                 currentIndex: tabBar.currentIndex
                 ConnectionPage { tokens: window.tokens }
                 ButtonsPage { tokens: window.tokens }
-                PermissionsPage { tokens: window.tokens }
                 DiagnosticsPage { tokens: window.tokens }
             }
         }

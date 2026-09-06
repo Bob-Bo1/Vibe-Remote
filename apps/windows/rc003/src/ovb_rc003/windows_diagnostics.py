@@ -1,4 +1,4 @@
-"""Qt-free "检查与修复" (check-and-repair) diagnostics (XRBM-031).
+"""Qt-free Windows diagnostics (XRBM-031).
 
 Every check below is a plain function returning a typed, stable
 ``CheckResult`` - no Tk/Qt import anywhere in this module, matching this
@@ -1134,8 +1134,8 @@ def check_output_endpoint_resolution(
         CheckGroup.VOICE_BRIDGE,
         CheckStatus.FAIL,
         f"已选择端点 {endpoint.name!r} 存在，但不是 CABLE Input——如果计划使用"
-        "本页的 VB-CABLE 语音链路，需要在「检查与修复」页点击「选择检测到的 "
-        "CABLE Input 作为输出」，或在「连接」页手动改选 CABLE Input。",
+        "本项目的 VB-CABLE 语音链路，请回到「连接与配置」页选择检测到的 "
+        "CABLE Input。",
     )
 
 

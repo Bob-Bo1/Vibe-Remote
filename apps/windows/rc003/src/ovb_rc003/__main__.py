@@ -25,7 +25,7 @@ built from the standalone ``src/launcher.py`` entry point - see XRBM-021):
                   alone).
 - ``--diagnose-ble-candidates <result-path>``  HIDDEN, undocumented in
                   ``--help`` on purpose (XRBM-035 RETRY 1): the settings
-                  window's "检查与修复" page's BLE candidate check
+                  window's background diagnostics BLE candidate check
                   re-invokes this same entry point (source:
                   ``sys.executable -m ovb_rc003 --diagnose-ble-candidates
                   <result-path>``; frozen build: the packaged .exe

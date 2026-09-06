@@ -45,7 +45,7 @@ if REMOTE_PHOTO.is_file():
     datas.append((str(REMOTE_PHOTO), "Resources"))
 if QML_SOURCE_DIR.is_dir():
     # XRBM-030: the settings window's own QML sources (main.qml/Tokens.qml/
-    # ConnectionPage.qml/ButtonsPage.qml/PermissionsPage.qml) are real files
+    # ConnectionPage.qml/ButtonsPage.qml/DiagnosticsPage.qml) are real files
     # on disk, not a Python module - PyInstaller's Analysis never discovers
     # them on its own, and no PySide6 hook bundles THIRD-PARTY qml/ trees
     # (only Qt's OWN Quick Controls/QML plugin assets, handled automatically

@@ -17,7 +17,7 @@ Essentials is missing (source/dev runs only: the frozen build always bundles
 the Qt runtime itself - see build/RemoteMicRC003.spec - so end users
 never need to separately install Python or Qt).
 
-``DiagnosticsController`` (XRBM-031's "检查与修复" fourth page) runs every
+``DiagnosticsController`` runs every
 ``windows_diagnostics.run_diagnostics()`` check on a plain background
 ``threading.Thread`` - never on the Qt GUI thread, so a slow WinRT/PortAudio
 call can never freeze the window - and delivers the result back via a
@@ -1436,7 +1436,7 @@ def _load_qt_classes() -> dict:
                 self._set_full_keys_status("已跳过授权，基础按键可用；特殊按键稍后可准备")
             else:
                 self._set_full_keys_status(
-                    "全部按键准备失败，基础按键仍可用；可在检查与修复中重试"
+                    "全部按键准备失败，基础按键仍可用；可在连接与配置页重试"
                 )
 
         @Slot(result=bool)
@@ -1573,7 +1573,7 @@ def _load_qt_classes() -> dict:
         @Slot(str, str, result=bool)
         def selectAndPersistOutputEndpoint(self, name: str, host_api: str) -> bool:
             """Persists a SPECIFIC (name, host_api) pair directly - used by
-            the "检查与修复" page's "选择检测到的 CABLE Input" action (XRBM-031
+            the "连接与配置" page's "选择检测到的 CABLE Input" action (XRBM-031
             In-scope item 5), which already knows the exact endpoint from its
             own enumeration rather than a combo-box display string. Bypasses
             build_save_model()'s hotkey/mapping validation entirely (there is
@@ -1620,7 +1620,7 @@ def _load_qt_classes() -> dict:
         }
 
     class DiagnosticsController(QObject):
-        """QML-facing adapter for the "检查与修复" page (XRBM-031). Every
+        """QML-facing adapter for the diagnostics checks (XRBM-031). Every
         check runs off the Qt GUI thread (see module docstring); every
         driver-launch/endpoint-select action is a thin wrapper with no
         business logic of its own, matching SettingsController's contract.

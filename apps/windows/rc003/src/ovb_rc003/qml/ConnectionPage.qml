@@ -14,7 +14,7 @@ Item {
     function cableCheck() {
         var rows = DiagnosticsController.checkResults
         for (var i = 0; i < rows.length; i++) {
-            if (rows[i].id === "vb_cable_endpoints")
+            if (rows[i].checkId === "vb_cable_endpoints")
                 return rows[i]
         }
         return { status: "checking", detail: qsTr("正在检查 CABLE Input 和 CABLE Output…") }
