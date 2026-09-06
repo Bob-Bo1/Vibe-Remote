@@ -1,0 +1,18 @@
+.build/
+dist/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+build-integrated-*/
+
+# Local project-control records are not part of the public source release.
+docs/*
+!docs/screenshots/
+!docs/screenshots/settings-connection.png
+!docs/screenshots/settings-buttons.png
+AGENTS.md
+
+# Versioned local PyInstaller candidates stay outside the public source tree.
+apps/windows/rc003/dist-v*/
+apps/windows/rc003/build/pyinstaller-work-v*/
